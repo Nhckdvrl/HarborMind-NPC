@@ -1,0 +1,24 @@
+base:
+  served_model_name: Qwen3-NPC-Base
+  model: Qwen/Qwen3-32B
+  port: 8000
+  tensor_parallel_size: 4
+  max_model_len: 8192
+
+sft:
+  served_model_name: Qwen3-NPC-SFT
+  model: Qwen/Qwen3-32B
+  enable_lora: true
+  lora_modules:
+    - name: npc-sft
+      path: outputs/sft/qwen3_32b_npc_qlora
+  port: 8001
+  tensor_parallel_size: 4
+  max_model_len: 8192
+
+grpo:
+  served_model_name: Qwen3-NPC-GRPO
+  model: outputs/grpo/qwen3_32b_npc
+  port: 8002
+  tensor_parallel_size: 4
+  max_model_len: 8192
