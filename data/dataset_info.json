@@ -1,0 +1,30 @@
+{
+  "game_npc_sft": {
+    "file_name": "llamafactory/npc_sft_train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant",
+      "system_tag": "system"
+    }
+  },
+  "game_npc_sft_valid": {
+    "file_name": "llamafactory/npc_sft_valid.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant",
+      "system_tag": "system"
+    }
+  }
+}

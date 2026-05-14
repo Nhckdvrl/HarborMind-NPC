@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG="${1:-configs/axolotl/qwen3_8b_npc_qlora_smoke.yml}"
-accelerate launch -m axolotl.cli.train "${CONFIG}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -x "${ROOT}/.venv-qwen35/bin/llamafactory-cli" ]]; then
+  export PATH="${ROOT}/.venv-qwen35/bin:${PATH}"
+fi
+
+CONFIG="${1:-configs/llamafactory/qwen3_5_9b_npc_sft_smoke.yaml}"
+llamafactory-cli train "${CONFIG}"

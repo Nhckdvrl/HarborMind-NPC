@@ -8,6 +8,50 @@ from typing import Any
 from game_npc_llm.data.io import stable_split
 from game_npc_llm.data.prompts import quest_prompt, sft_system_prompt
 
+BLOCKED_REFERENCE_TERMS = {
+    "akatsuki",
+    "aragorn",
+    "batman",
+    "bowser",
+    "bugs bunny",
+    "cheep cheep",
+    "dattebayo",
+    "disney",
+    "frodo",
+    "gandalf",
+    "goomba",
+    "harry potter",
+    "hinata",
+    "hogwarts",
+    "hokage",
+    "ichiraku",
+    "jedi",
+    "kakashi",
+    "land of waves",
+    "luigi",
+    "mario",
+    "marvel",
+    "mushroom kingdom",
+    "naruto",
+    "peach",
+    "pikachu",
+    "piranha plant",
+    "pokemon",
+    "rasengan",
+    "rasenshuriken",
+    "sakura",
+    "sasuke",
+    "shikamaru",
+    "sith",
+    "snape",
+    "spider-man",
+    "spiderman",
+    "star wars",
+    "superman",
+    "toad town",
+    "zelda",
+}
+
 
 def build_sample_records() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     persona = "Mira is a cautious village alchemist who speaks in practical, herbal terms."
@@ -72,7 +116,7 @@ def convert_npc_dialogue(records: Iterable[dict[str, Any]], seed: int = 42) -> t
     sft_records: list[dict] = []
     eval_records: list[dict] = []
     for idx, row in enumerate(rows):
-        split = stable_split(idx, len(rows))
+        split = normalize_split(stable_split(idx, len(rows)))
         persona = pick_first(row, "persona", "character", "npc_persona", "description", default="RPG NPC")
         setting = pick_first(row, "setting", "scenario", "world", "location", default="A fantasy RPG scene")
         player = pick_first(row, "player", "user", "instruction", "question", "input", default="")
@@ -82,6 +126,8 @@ def convert_npc_dialogue(records: Iterable[dict[str, Any]], seed: int = 42) -> t
             if len(turns) >= 2:
                 player, npc = turns[-2], turns[-1]
         if not player or not npc:
+            continue
+        if has_blocked_reference(" ".join([persona, setting, player, npc])):
             continue
         rec_id = f"npc-dialogue-v2-{idx:06d}"
         if split == "test":
@@ -130,7 +176,15 @@ def convert_light_dialog(records: Iterable[dict[str, Any]], source: str) -> list
         turns = extract_turns(row)
         if len(turns) < 2:
             continue
-        persona = pick_first(row, "persona", "self_persona", "character", "speaker", default="LIGHT NPC")
+        persona = pick_first(
+            row,
+            "persona",
+            "self_persona",
+            "character",
+            "characters",
+            "speaker",
+            default="LIGHT NPC",
+        )
         setting = pick_first(row, "setting", "room", "location", "context", default="LIGHT fantasy world")
         for pair_idx in range(0, len(turns) - 1, 2):
             player = turns[pair_idx]
@@ -140,7 +194,9 @@ def convert_light_dialog(records: Iterable[dict[str, Any]], source: str) -> list
                     {
                         "id": f"{source}-{idx:06d}-{pair_idx // 2:02d}",
                         "source": source,
-                        "split": pick_first(row, "split", default=stable_split(idx, len(rows))),
+                        "split": normalize_split(
+                            pick_first(row, "split", default=stable_split(idx, len(rows)))
+                        ),
                         "messages": [
                             {"role": "system", "content": sft_system_prompt(persona, setting)},
                             {"role": "user", "content": player},
@@ -157,7 +213,7 @@ def convert_light_quests(records: Iterable[dict[str, Any]], source: str) -> tupl
     grpo_records: list[dict] = []
     eval_records: list[dict] = []
     for idx, row in enumerate(rows):
-        split = pick_first(row, "split", default=stable_split(idx, len(rows)))
+        split = normalize_split(pick_first(row, "split", default=stable_split(idx, len(rows))))
         persona = pick_first(row, "persona", "character", "npc", "motivation", default="LIGHT quest NPC")
         setting = pick_first(row, "setting", "room", "location", "context", default="LIGHT quest scene")
         goal = pick_first(row, "goal", "quest_goal", "objective", "task", default="Advance the quest")
@@ -242,6 +298,18 @@ def extract_turns(row: dict[str, Any]) -> list[str]:
 
 def strip_speaker(text: str) -> str:
     return re.sub(r"^[A-Za-z0-9 _-]{1,32}:\s*", "", text).strip()
+
+
+def has_blocked_reference(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text).lower()
+    return any(term in normalized for term in BLOCKED_REFERENCE_TERMS)
+
+
+def normalize_split(split: str) -> str:
+    normalized = split.strip().lower()
+    if normalized in {"valid", "val", "dev"}:
+        return "validation"
+    return normalized
 
 
 def extract_actions(row: dict[str, Any]) -> list[str]:

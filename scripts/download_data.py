@@ -5,6 +5,7 @@ import argparse
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ from game_npc_llm.data.io import write_jsonl
 
 
 LIGHT_TASKS = {
-    "light_dialog": ["facebook/light", "light_dialog"],
+    "light_dialog": ["dap-exp/light_dialog"],
     "light_dialog_wild": ["facebook/light", "light_dialog_wild"],
     "light_quests": ["facebook/light", "light_quests"],
 }
@@ -46,6 +47,14 @@ def main() -> None:
     if args.dry_run:
         sft, grpo, eval_cases = build_sample_records()
         write_outputs(processed, sft, grpo, eval_cases)
+        dump_manifest(
+            args.output_dir / "raw_manifest.json",
+            {
+                "generated_at": now_iso(),
+                "dry_run": True,
+                "sources": {"dry_run": {"records": len(sft) + len(grpo) + len(eval_cases)}},
+            },
+        )
         print("Dry run complete. Wrote sample processed JSONL files.")
         return
 
@@ -54,9 +63,7 @@ def main() -> None:
     eval_records: list[dict[str, Any]] = []
 
     if not args.skip_npc_dialogue:
-        from datasets import load_dataset
-
-        npc_rows = flatten_dataset(load_dataset("chimbiwide/NPC-Dialogue_v2"))
+        npc_rows = flatten_dataset(load_hf_dataset("chimbiwide/NPC-Dialogue_v2", config="dialogue"))
         npc_sft, npc_eval = convert_npc_dialogue(npc_rows, seed=args.seed)
         sft_records.extend(npc_sft)
         eval_records.extend(npc_eval)
@@ -79,6 +86,23 @@ def main() -> None:
             dump_manifest(raw / f"{task_name}_manifest.json", {"records": len(rows)})
 
     write_outputs(processed, sft_records, grpo_records, eval_records)
+    dump_manifest(
+        args.output_dir / "raw_manifest.json",
+        {
+            "generated_at": now_iso(),
+            "seed": args.seed,
+            "sources": {
+                "sft_records": len(sft_records),
+                "grpo_records": len(grpo_records),
+                "eval_records": len(eval_records),
+            },
+            "notes": [
+                "NPC-Dialogue_v2 records with obvious copyrighted IP or celebrity references are filtered during conversion.",
+                "LIGHT dialogue uses the dap-exp/light_dialog Hugging Face mirror when available.",
+                "LIGHT-WILD and LIGHT-Quests fall back to ParlAI tasks when installed.",
+            ],
+        },
+    )
 
 
 def flatten_dataset(dataset: Any) -> list[dict[str, Any]]:
@@ -99,12 +123,23 @@ def flatten_dataset(dataset: Any) -> list[dict[str, Any]]:
 
 def try_load_hf_light(hf_args: list[str]) -> list[dict[str, Any]] | None:
     try:
-        from datasets import load_dataset
-
-        return flatten_dataset(load_dataset(*hf_args))
+        return flatten_dataset(load_hf_dataset(*hf_args))
     except Exception as exc:
         print(f"HF load failed for {hf_args}: {exc}")
         return None
+
+
+def load_hf_dataset(path: str, config: str | None = None) -> Any:
+    from datasets import load_dataset
+
+    try:
+        return load_dataset(path, config) if config else load_dataset(path)
+    except ValueError as exc:
+        message = str(exc)
+        if "Config name is missing" in message and config is None:
+            if path == "chimbiwide/NPC-Dialogue_v2":
+                return load_dataset(path, "dialogue")
+        raise
 
 
 def try_load_parlai_task(task_name: str, datadir: Path) -> list[dict[str, Any]] | None:
@@ -113,7 +148,7 @@ def try_load_parlai_task(task_name: str, datadir: Path) -> list[dict[str, Any]] 
     except Exception:
         return None
     cmd = [
-        "python3",
+        sys.executable,
         "-m",
         "parlai.scripts.display_data",
         "--task",
@@ -160,7 +195,18 @@ def dump_manifest(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def write_outputs(processed: Path, sft: list[dict], grpo: list[dict], eval_cases: list[dict]) -> None:
+    llamafactory = processed.parent / "llamafactory"
+    rl = processed.parent / "rl"
+    eval_dir = processed.parent / "eval"
+    llamafactory.mkdir(parents=True, exist_ok=True)
+    rl.mkdir(parents=True, exist_ok=True)
+    eval_dir.mkdir(parents=True, exist_ok=True)
+
     sft_train = [record for record in sft if record["split"] == "train"]
     sft_validation = [record for record in sft if record["split"] == "validation"]
     sft_test = [record for record in sft if record["split"] == "test"]
@@ -170,8 +216,18 @@ def write_outputs(processed: Path, sft: list[dict], grpo: list[dict], eval_cases
         "sft_test": write_jsonl(processed / "sft_test.jsonl", sft_test),
         "grpo_prompts": write_jsonl(processed / "grpo_prompts.jsonl", grpo),
         "eval_cases": write_jsonl(processed / "eval_cases.jsonl", eval_cases),
+        "llamafactory_train": write_json_array(llamafactory / "npc_sft_train.json", sft_train),
+        "llamafactory_valid": write_json_array(llamafactory / "npc_sft_valid.json", sft_validation),
+        "rl_grpo_prompts": write_jsonl(rl / "grpo_prompts.jsonl", grpo),
+        "eval_cases_copy": write_jsonl(eval_dir / "eval_cases.jsonl", eval_cases),
     }
     print(json.dumps(counts, indent=2, sort_keys=True))
+
+
+def write_json_array(path: Path, records: list[dict]) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(records)
 
 
 if __name__ == "__main__":

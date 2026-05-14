@@ -5,7 +5,7 @@ Reproducible pipeline for building a quest-oriented game NPC model from public d
 - LIGHT / LIGHT-WILD / LIGHT-Quests from ParlAI/Facebook Research.
 - `chimbiwide/NPC-Dialogue_v2` from Hugging Face.
 
-The project covers data conversion, QLoRA SFT with Axolotl, GRPO alignment with slime, vLLM serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
+The project covers data conversion, QLoRA SFT with LLaMA-Factory, GRPO alignment with slime, vLLM serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
 
 ## Repository Layout
 
@@ -20,8 +20,8 @@ tests/                   Local schema and state-machine tests
 ## Local Setup
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+conda create -p .venv-qwen35 python=3.11
+conda activate "$(pwd)/.venv-qwen35"
 pip install -e ".[dev]"
 ```
 
@@ -54,28 +54,43 @@ Outputs:
 - `data/processed/sft_train.jsonl`
 - `data/processed/sft_validation.jsonl`
 - `data/processed/sft_test.jsonl`
+- `data/llamafactory/npc_sft_train.json`
+- `data/llamafactory/npc_sft_valid.json`
+- `data/raw_manifest.json`
 - `data/processed/grpo_prompts.jsonl`
+- `data/rl/grpo_prompts.jsonl`
 - `data/processed/eval_cases.jsonl`
+- `data/eval/eval_cases.jsonl`
 
 ## SFT
 
 Smoke:
 
 ```bash
-accelerate launch -m axolotl.cli.train configs/axolotl/qwen3_8b_npc_qlora_smoke.yml
+bash scripts/run_sft.sh
 ```
 
 Main:
 
 ```bash
-accelerate launch -m axolotl.cli.train configs/axolotl/qwen3_32b_npc_qlora.yml
+bash scripts/run_sft.sh configs/llamafactory/qwen3_5_27b_npc_sft_qlora.yaml
+```
+
+LLaMA-Factory reads the local SFT JSONL files through `data/dataset_info.json`.
+The processed `messages` column is registered as a ShareGPT/OpenAI-style chat dataset.
+The Qwen3.5 configs use LLaMA-Factory's `qwen3_5_nothink` template, matching the direct NPC reply style in the SFT data.
+
+Merge the main SFT adapter for vLLM/slime:
+
+```bash
+bash scripts/export_sft.sh
 ```
 
 ## GRPO
 
 ```bash
 PORT=8091 bash scripts/run_reward_server.sh
-bash scripts/run_grpo.sh configs/slime/qwen3_32b_npc_grpo.sh
+bash scripts/run_grpo.sh configs/slime/qwen3_5_27b_npc_grpo.sh
 ```
 
 The reward stack combines deterministic verifiers and optional OpenAI-compatible LLM judge scoring.
@@ -91,7 +106,7 @@ bash scripts/serve_vllm.sh grpo
 ## Agent Demo
 
 ```bash
-python3 scripts/run_agent_demo.py --model-url http://localhost:8000/v1 --model Qwen3-NPC-GRPO
+python3 scripts/run_agent_demo.py --model-url http://localhost:8000/v1 --model Qwen3.5-NPC-GRPO
 ```
 
 ## Evaluation
@@ -108,10 +123,10 @@ Run a full eval on a served model:
 lm_eval --model local-completions \
   --tasks game_npc_bench \
   --include_path src/game_npc_llm/eval/tasks \
-  --model_args model=Qwen3-NPC-GRPO,base_url=http://localhost:8000/v1/completions \
+  --model_args model=Qwen3.5-NPC-GRPO,base_url=http://localhost:8000/v1/completions \
   --output_path reports/grpo_eval.json
 ```
 
 ## Model Notes
 
-The configs follow the project assumption of `Qwen/Qwen3-32B` for the first full run and `Qwen/Qwen3-8B` for smoke tests. If your environment has `Qwen/Qwen3.5-27B` and `Qwen/Qwen3.5-4B` available, override `base_model` in the YAML files and model names in `configs/vllm/models.yml`.
+The configs follow the project assumption of `Qwen/Qwen3.5-27B` for the first full run and `Qwen/Qwen3.5-9B` for smoke tests.

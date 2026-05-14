@@ -1,0 +1,55 @@
+### model
+model_name_or_path: Qwen/Qwen3.5-9B
+trust_remote_code: true
+quantization_bit: 4
+quantization_method: bitsandbytes
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target: all
+
+### dataset
+dataset_dir: data
+dataset: game_npc_sft
+eval_dataset: game_npc_sft_valid
+template: qwen3_5_nothink
+cutoff_len: 2048
+overwrite_cache: true
+preprocessing_num_workers: 4
+dataloader_num_workers: 0
+packing: false
+
+### output
+output_dir: outputs/sft/qwen3_5_9b_npc_lora_smoke
+logging_steps: 1
+save_steps: 10
+save_total_limit: 1
+plot_loss: true
+overwrite_output_dir: true
+save_only_model: false
+report_to: none
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 1
+learning_rate: 2.0e-4
+max_steps: 20
+lr_scheduler_type: cosine
+warmup_steps: 2
+optim: paged_adamw_8bit
+bf16: true
+tf32: true
+gradient_checkpointing: true
+ddp_timeout: 180000000
+resume_from_checkpoint: null
+
+### eval
+do_eval: true
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 10
