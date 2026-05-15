@@ -49,7 +49,7 @@ ddp_timeout: 180000000
 resume_from_checkpoint: null
 
 ### eval
-do_eval: true
+do_eval: false
 per_device_eval_batch_size: 1
 eval_strategy: steps
 eval_steps: 10

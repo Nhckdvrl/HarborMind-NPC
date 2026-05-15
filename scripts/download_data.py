@@ -218,10 +218,29 @@ def write_outputs(processed: Path, sft: list[dict], grpo: list[dict], eval_cases
         "eval_cases": write_jsonl(processed / "eval_cases.jsonl", eval_cases),
         "llamafactory_train": write_json_array(llamafactory / "npc_sft_train.json", sft_train),
         "llamafactory_valid": write_json_array(llamafactory / "npc_sft_valid.json", sft_validation),
-        "rl_grpo_prompts": write_jsonl(rl / "grpo_prompts.jsonl", grpo),
+        "rl_grpo_prompts": write_jsonl(rl / "grpo_prompts.jsonl", [to_slime_record(record) for record in grpo]),
         "eval_cases_copy": write_jsonl(eval_dir / "eval_cases.jsonl", eval_cases),
     }
     print(json.dumps(counts, indent=2, sort_keys=True))
+
+
+def to_slime_record(record: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(record.get("metadata") or {})
+    metadata.update(
+        {
+            "id": record.get("id"),
+            "source": record.get("source"),
+            "persona": record.get("persona", ""),
+            "setting": record.get("setting", ""),
+            "goal": record.get("goal", ""),
+            "allowed_entities": record.get("allowed_entities", []),
+        }
+    )
+    return {
+        "prompt": record["prompt"],
+        "label": record.get("goal", ""),
+        "metadata": metadata,
+    }
 
 
 def write_json_array(path: Path, records: list[dict]) -> int:

@@ -3,18 +3,21 @@ base:
   model: Qwen/Qwen3.5-27B
   port: 8000
   tensor_parallel_size: 4
-  max_model_len: 8192
+  context_length: 8192
+  mem_fraction_static: 0.88
 
 sft:
   served_model_name: Qwen3.5-NPC-SFT
   model: outputs/sft/qwen3_5_27b_npc_merged
   port: 8001
   tensor_parallel_size: 4
-  max_model_len: 8192
+  context_length: 8192
+  mem_fraction_static: 0.88
 
 grpo:
   served_model_name: Qwen3.5-NPC-GRPO
-  model: outputs/grpo/qwen3_5_27b_npc_grpo
+  model: outputs/grpo/qwen3_5_27b_npc_grpo_hf
   port: 8002
   tensor_parallel_size: 4
-  max_model_len: 8192
+  context_length: 8192
+  mem_fraction_static: 0.88

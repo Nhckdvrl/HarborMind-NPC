@@ -24,7 +24,7 @@ async def one(client: AsyncOpenAI, model: str, prompt: str) -> tuple[float, int]
 async def main_async() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://localhost:8000/v1")
-    parser.add_argument("--model", default="Qwen3-NPC-Base")
+    parser.add_argument("--model", default="Qwen3.5-NPC-Base")
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--requests", type=int, default=32)
     args = parser.parse_args()

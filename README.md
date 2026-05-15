@@ -5,7 +5,7 @@ Reproducible pipeline for building a quest-oriented game NPC model from public d
 - LIGHT / LIGHT-WILD / LIGHT-Quests from ParlAI/Facebook Research.
 - `chimbiwide/NPC-Dialogue_v2` from Hugging Face.
 
-The project covers data conversion, QLoRA SFT with LLaMA-Factory, GRPO alignment with slime, vLLM serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
+The project covers data conversion, QLoRA SFT with LLaMA-Factory, GRPO alignment with slime, SGLang serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
 
 ## Repository Layout
 
@@ -25,10 +25,10 @@ conda activate "$(pwd)/.venv-qwen35"
 pip install -e ".[dev]"
 ```
 
-Optional server extras:
+Optional server and RL extras:
 
 ```bash
-pip install -e ".[train,serve,eval]"
+pip install -e ".[train,serve,rl,eval]"
 ```
 
 ## Data Pipeline
@@ -80,7 +80,7 @@ LLaMA-Factory reads the local SFT JSONL files through `data/dataset_info.json`.
 The processed `messages` column is registered as a ShareGPT/OpenAI-style chat dataset.
 The Qwen3.5 configs use LLaMA-Factory's `qwen3_5_nothink` template, matching the direct NPC reply style in the SFT data.
 
-Merge the main SFT adapter for vLLM/slime:
+Merge the main SFT adapter for serving/slime:
 
 ```bash
 bash scripts/export_sft.sh
@@ -89,18 +89,23 @@ bash scripts/export_sft.sh
 ## GRPO
 
 ```bash
-PORT=8091 bash scripts/run_reward_server.sh
+python3 scripts/prepare_slime_data.py
+export SLIME_DIR=/path/to/slime
+export SLIME_MODEL_ARGS_SCRIPT=/path/to/slime/scripts/models/qwen3.5-27B.sh
+export REF_LOAD=outputs/slime/qwen3_5_27b_npc_ref_torch_dist
 bash scripts/run_grpo.sh configs/slime/qwen3_5_27b_npc_grpo.sh
 ```
 
-The reward stack combines deterministic verifiers and optional OpenAI-compatible LLM judge scoring.
+GRPO uses `data/rl/grpo_prompts.jsonl`, not the SFT assistant-answer dataset. Each RL row contains a quest prompt plus reward metadata; slime samples candidate NPC replies with SGLang and scores them through `game_npc_llm.rewards.slime_rm.reward_func`. Before running RL, convert the merged SFT Hugging Face checkpoint to slime/Megatron `torch_dist` format and point `REF_LOAD` at that directory.
 
-## vLLM Serving
+After slime training, convert the saved Megatron checkpoint back to Hugging Face format with slime's `tools/convert_torch_dist_to_hf.py`, then place it at `outputs/grpo/qwen3_5_27b_npc_grpo_hf` or update `configs/sglang/models.yml`.
+
+## SGLang Serving
 
 ```bash
-bash scripts/serve_vllm.sh base
-bash scripts/serve_vllm.sh sft
-bash scripts/serve_vllm.sh grpo
+bash scripts/serve_sglang.sh base
+bash scripts/serve_sglang.sh sft
+bash scripts/serve_sglang.sh grpo
 ```
 
 ## Agent Demo
