@@ -11,7 +11,45 @@ LEAKAGE_PATTERNS = [
     r"\bas an ai\b",
     r"\bi cannot roleplay\b",
     r"\binstructions say\b",
+    r"\bout of character\b",
+    r"\bi am (?:just )?(?:a )?(?:language model|chatbot)\b",
 ]
+
+GENERIC_WORLD_TERMS = {
+    "adventurer",
+    "ally",
+    "captain",
+    "child",
+    "companion",
+    "creature",
+    "friend",
+    "guard",
+    "hunter",
+    "king",
+    "lady",
+    "lord",
+    "master",
+    "npc",
+    "player",
+    "queen",
+    "scout",
+    "sir",
+    "soldier",
+    "stranger",
+    "traveler",
+    "village",
+    "ask",
+    "bring",
+    "find",
+    "follow",
+    "give",
+    "go",
+    "return",
+    "seek",
+    "take",
+    "tell",
+    "use",
+}
 
 
 @dataclass
@@ -50,7 +88,9 @@ def score_response(
     persona = prompt_record.get("persona", "")
     goal = prompt_record.get("goal", "")
     allowed_entities = prompt_record.get("allowed_entities", [])
-    expected_actions = prompt_record.get("metadata", {}).get("expected_actions", [])
+    expected_actions = prompt_record.get("expected_actions") or prompt_record.get("metadata", {}).get(
+        "expected_actions", []
+    )
     return RewardBreakdown(
         character_consistency=character_score(persona, response),
         quest_progress=quest_score(goal, expected_actions, response),
@@ -89,12 +129,40 @@ def quest_score(goal: str, expected_actions: list[str], response: str) -> float:
 def world_score(allowed_entities: list[str], response: str) -> float:
     if not response:
         return 0.0
-    allowed = {entity.lower() for entity in allowed_entities}
-    named = set(re.findall(r"\b[A-Z][a-zA-Z]{2,}\b", response))
-    if not named:
+    allowed = normalize_allowed_entities(allowed_entities)
+    mentioned = unsupported_world_mentions(response, allowed)
+    if not mentioned:
         return 1.0
-    unsupported = [name for name in named if name.lower() not in allowed]
-    return clamp(1.0 - len(unsupported) / max(3, len(named)))
+    return clamp(1.0 - len(mentioned) / 3)
+
+
+def normalize_allowed_entities(allowed_entities: list[str]) -> set[str]:
+    allowed = set(GENERIC_WORLD_TERMS)
+    for entity in allowed_entities:
+        normalized = normalize_entity(str(entity))
+        if normalized:
+            allowed.add(normalized)
+            allowed.update(part for part in normalized.split() if len(part) >= 4)
+    return allowed
+
+
+def unsupported_world_mentions(response: str, allowed: set[str]) -> list[str]:
+    mentions: list[str] = []
+    # Proper names and title-cased item/location phrases are the most reliable hallucination signal.
+    for match in re.finditer(r"\b(?:[A-Z][a-zA-Z']{2,})(?:\s+[A-Z][a-zA-Z']{2,}){0,3}\b", response):
+        mention = match.group(0)
+        if match.start() == 0 and mention.lower() in GENERIC_WORLD_TERMS:
+            continue
+        if normalize_entity(mention) not in allowed:
+            mentions.append(mention)
+
+    # Catch common lower-case fantasy invention patterns without punishing ordinary prose.
+    cue_pattern = r"\b(?:called|named|known as|from|in|at|near)\s+(?:the\s+)?([a-z][a-z]+(?:\s+[a-z][a-z]+){0,2})"
+    for match in re.finditer(cue_pattern, response, flags=re.I):
+        phrase = normalize_entity(match.group(1))
+        if phrase and phrase not in allowed and not any(part in allowed for part in phrase.split()):
+            mentions.append(match.group(1))
+    return dedupe_mentions(mentions)
 
 
 def format_safety_score(response: str) -> float:
@@ -122,3 +190,20 @@ def keywords(text: str) -> list[str]:
 
 def clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+def normalize_entity(text: str) -> str:
+    text = re.sub(r"[^a-zA-Z0-9' ]+", " ", text.lower())
+    text = re.sub(r"\b(?:the|a|an)\b", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def dedupe_mentions(mentions: list[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for mention in mentions:
+        key = normalize_entity(mention)
+        if key and key not in seen:
+            seen.add(key)
+            output.append(mention)
+    return output

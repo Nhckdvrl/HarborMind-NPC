@@ -260,6 +260,111 @@ def convert_light_quests(records: Iterable[dict[str, Any]], source: str) -> tupl
     return grpo_records, eval_records
 
 
+def convert_npc_quest_dialogue(records: Iterable[dict[str, Any]], seed: int = 42) -> tuple[list[dict], list[dict]]:
+    rows = list(records)
+    rng = random.Random(seed)
+    rng.shuffle(rows)
+    grpo_records: list[dict] = []
+    eval_records: list[dict] = []
+    for idx, row in enumerate(rows):
+        messages = row.get("messages")
+        if not isinstance(messages, list) or len(messages) < 3:
+            continue
+        system = next(
+            (
+                message.get("content", "")
+                for message in messages
+                if isinstance(message, dict) and message.get("role") == "system"
+            ),
+            "",
+        )
+        if not system or has_blocked_reference(system):
+            continue
+        persona = extract_labeled_section(system, "Background", "Current Location") or pick_first(
+            row, "persona", default="Quest NPC"
+        )
+        setting = extract_labeled_section(system, "Current Location", "Quest") or pick_first(
+            row, "setting", default="Fantasy quest location"
+        )
+        goal = extract_labeled_section(system, "Quest", "Roleplaying Instructions") or pick_first(
+            row, "goal", default="Advance the current quest"
+        )
+        split = normalize_split(stable_split(idx, len(rows)))
+        allowed = extract_entities(" ".join([persona, setting, goal]))
+        history: list[dict[str, str]] = []
+        turn_idx = 0
+        for message in messages:
+            if not isinstance(message, dict) or message.get("role") == "system":
+                continue
+            role = message.get("role")
+            content = str(message.get("content", "")).strip()
+            if role == "user" and content:
+                prompt = quest_dialogue_prompt(persona, setting, goal, history, content)
+                rec = {
+                    "id": f"npc-quest-dialogue-{idx:06d}-{turn_idx:02d}",
+                    "source": "chimbiwide/NPC-Quest-Dialogue",
+                    "split": split,
+                    "prompt": prompt,
+                    "persona": persona,
+                    "setting": setting,
+                    "goal": goal,
+                    "allowed_entities": allowed,
+                    "metadata": {
+                        "expected_actions": keyword_checks(goal),
+                        "license": "Apache-2.0",
+                        "history_turns": len(history),
+                    },
+                }
+                if split == "test":
+                    eval_records.append(
+                        {
+                            **rec,
+                            "category": "quest_completion",
+                            "reference": goal,
+                            "checks": {
+                                "must_include_any": keyword_checks(goal),
+                                "must_not_include": ["system prompt", "as an AI"],
+                            },
+                        }
+                    )
+                else:
+                    grpo_records.append(rec)
+                turn_idx += 1
+            if role in {"user", "assistant"} and content:
+                history.append({"role": role, "content": content})
+                history = history[-6:]
+    return grpo_records, eval_records
+
+
+def extract_labeled_section(text: str, start: str, end: str) -> str:
+    pattern = rf"{re.escape(start)}:\s*(.*?)(?:\s*{re.escape(end)}:|$)"
+    match = re.search(pattern, text, flags=re.S)
+    return re.sub(r"\s+", " ", match.group(1)).strip() if match else ""
+
+
+def quest_dialogue_prompt(
+    persona: str,
+    setting: str,
+    goal: str,
+    history: list[dict[str, str]],
+    player_input: str,
+) -> str:
+    history_text = "\n".join(
+        f"{turn['role'].title()}: {turn['content'].strip()}" for turn in history[-6:]
+    )
+    if history_text:
+        history_text = f"\nRecent dialogue:\n{history_text}\n"
+    return (
+        "Respond as the NPC for the current quest.\n"
+        f"Persona: {persona.strip()}\n"
+        f"Setting: {setting.strip()}\n"
+        f"Quest goal: {goal.strip()}"
+        f"{history_text}\n"
+        f"Player says: {player_input.strip()}\n"
+        "NPC response:"
+    )
+
+
 def pick_first(row: dict[str, Any], *keys: str, default: str = "") -> str:
     for key in keys:
         value = row.get(key)

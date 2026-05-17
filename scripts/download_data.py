@@ -19,6 +19,7 @@ from game_npc_llm.data.converters import (
     convert_light_dialog,
     convert_light_quests,
     convert_npc_dialogue,
+    convert_npc_quest_dialogue,
 )
 from game_npc_llm.data.io import write_jsonl
 
@@ -37,6 +38,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Write tiny sample files only.")
     parser.add_argument("--skip-light", action="store_true")
     parser.add_argument("--skip-npc-dialogue", action="store_true")
+    parser.add_argument("--skip-npc-quest-dialogue", action="store_true")
     args = parser.parse_args()
 
     processed = args.output_dir / "processed"
@@ -69,6 +71,13 @@ def main() -> None:
         eval_records.extend(npc_eval)
         dump_manifest(raw / "npc_dialogue_v2_manifest.json", {"records": len(npc_rows)})
 
+    if not args.skip_npc_quest_dialogue:
+        npc_quest_rows = flatten_dataset(load_hf_dataset("chimbiwide/NPC-Quest-Dialogue"))
+        npc_quest_grpo, npc_quest_eval = convert_npc_quest_dialogue(npc_quest_rows, seed=args.seed)
+        grpo_records.extend(npc_quest_grpo)
+        eval_records.extend(npc_quest_eval)
+        dump_manifest(raw / "npc_quest_dialogue_manifest.json", {"records": len(npc_quest_rows)})
+
     if not args.skip_light:
         for task_name, hf_args in LIGHT_TASKS.items():
             rows = try_load_hf_light(hf_args)
@@ -100,6 +109,7 @@ def main() -> None:
                 "NPC-Dialogue_v2 records with obvious copyrighted IP or celebrity references are filtered during conversion.",
                 "LIGHT dialogue uses the dap-exp/light_dialog Hugging Face mirror when available.",
                 "LIGHT-WILD and LIGHT-Quests fall back to ParlAI tasks when installed.",
+                "NPC-Quest-Dialogue is used as an Apache-2.0 fallback/supplement for GRPO quest prompts.",
             ],
         },
     )
@@ -201,10 +211,8 @@ def now_iso() -> str:
 
 def write_outputs(processed: Path, sft: list[dict], grpo: list[dict], eval_cases: list[dict]) -> None:
     llamafactory = processed.parent / "llamafactory"
-    rl = processed.parent / "rl"
     eval_dir = processed.parent / "eval"
     llamafactory.mkdir(parents=True, exist_ok=True)
-    rl.mkdir(parents=True, exist_ok=True)
     eval_dir.mkdir(parents=True, exist_ok=True)
 
     sft_train = [record for record in sft if record["split"] == "train"]
@@ -218,29 +226,9 @@ def write_outputs(processed: Path, sft: list[dict], grpo: list[dict], eval_cases
         "eval_cases": write_jsonl(processed / "eval_cases.jsonl", eval_cases),
         "llamafactory_train": write_json_array(llamafactory / "npc_sft_train.json", sft_train),
         "llamafactory_valid": write_json_array(llamafactory / "npc_sft_valid.json", sft_validation),
-        "rl_grpo_prompts": write_jsonl(rl / "grpo_prompts.jsonl", [to_slime_record(record) for record in grpo]),
         "eval_cases_copy": write_jsonl(eval_dir / "eval_cases.jsonl", eval_cases),
     }
     print(json.dumps(counts, indent=2, sort_keys=True))
-
-
-def to_slime_record(record: dict[str, Any]) -> dict[str, Any]:
-    metadata = dict(record.get("metadata") or {})
-    metadata.update(
-        {
-            "id": record.get("id"),
-            "source": record.get("source"),
-            "persona": record.get("persona", ""),
-            "setting": record.get("setting", ""),
-            "goal": record.get("goal", ""),
-            "allowed_entities": record.get("allowed_entities", []),
-        }
-    )
-    return {
-        "prompt": record["prompt"],
-        "label": record.get("goal", ""),
-        "metadata": metadata,
-    }
 
 
 def write_json_array(path: Path, records: list[dict]) -> int:

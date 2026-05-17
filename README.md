@@ -5,7 +5,7 @@ Reproducible pipeline for building a quest-oriented game NPC model from public d
 - LIGHT / LIGHT-WILD / LIGHT-Quests from ParlAI/Facebook Research.
 - `chimbiwide/NPC-Dialogue_v2` from Hugging Face.
 
-The project covers data conversion, QLoRA SFT with LLaMA-Factory, GRPO alignment with slime, SGLang serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
+The project covers data conversion, QLoRA SFT with LLaMA-Factory, GRPO-LoRA alignment with verl, SGLang serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
 
 ## Repository Layout
 
@@ -25,10 +25,16 @@ conda activate "$(pwd)/.venv-qwen35"
 pip install -e ".[dev]"
 ```
 
-Optional server and RL extras:
+Optional local extras:
 
 ```bash
-pip install -e ".[train,serve,rl,eval]"
+pip install -e ".[train,serve,eval]"
+```
+
+For GRPO training, install the RL extra in the training environment:
+
+```bash
+pip install -e ".[rl]"
 ```
 
 ## Data Pipeline
@@ -58,7 +64,6 @@ Outputs:
 - `data/llamafactory/npc_sft_valid.json`
 - `data/raw_manifest.json`
 - `data/processed/grpo_prompts.jsonl`
-- `data/rl/grpo_prompts.jsonl`
 - `data/processed/eval_cases.jsonl`
 - `data/eval/eval_cases.jsonl`
 
@@ -80,7 +85,7 @@ LLaMA-Factory reads the local SFT JSONL files through `data/dataset_info.json`.
 The processed `messages` column is registered as a ShareGPT/OpenAI-style chat dataset.
 The Qwen3.5 configs use LLaMA-Factory's `qwen3_5_nothink` template, matching the direct NPC reply style in the SFT data.
 
-Merge the main SFT adapter for serving/slime:
+Merge the main SFT adapter for serving and GRPO initialization:
 
 ```bash
 bash scripts/export_sft.sh
@@ -89,16 +94,22 @@ bash scripts/export_sft.sh
 ## GRPO
 
 ```bash
-python3 scripts/prepare_slime_data.py
-export SLIME_DIR=/path/to/slime
-export SLIME_MODEL_ARGS_SCRIPT=/path/to/slime/scripts/models/qwen3.5-27B.sh
-export REF_LOAD=outputs/slime/qwen3_5_27b_npc_ref_torch_dist
-bash scripts/run_grpo.sh configs/slime/qwen3_5_27b_npc_grpo.sh
+python3 scripts/prepare_verl_grpo_data.py
 ```
 
-GRPO uses `data/rl/grpo_prompts.jsonl`, not the SFT assistant-answer dataset. Each RL row contains a quest prompt plus reward metadata; slime samples candidate NPC replies with SGLang and scores them through `game_npc_llm.rewards.slime_rm.reward_func`. Before running RL, convert the merged SFT Hugging Face checkpoint to slime/Megatron `torch_dist` format and point `REF_LOAD` at that directory.
+Smoke on 100 LIGHT-Quests prompts:
 
-After slime training, convert the saved Megatron checkpoint back to Hugging Face format with slime's `tools/convert_torch_dist_to_hf.py`, then place it at `outputs/grpo/qwen3_5_27b_npc_grpo_hf` or update `configs/sglang/models.yml`.
+```bash
+bash scripts/run_verl_grpo.sh smoke
+```
+
+Full 27B run after smoke passes:
+
+```bash
+bash scripts/run_verl_grpo.sh full
+```
+
+GRPO uses verl-compatible parquet files under `data/rl/verl/`, not the SFT assistant-answer dataset. The smoke file is `data/rl/verl/grpo_smoke_100.parquet`; the full file is `data/rl/verl/grpo_train.parquet`. Each row stores the LIGHT-Quests prompt plus persona, setting, goal, allowed entities, expected actions, and source metadata in `extra_info`; verl calls `game_npc_llm.rewards.verl_reward.compute_score` for the rule reward.
 
 ## SGLang Serving
 
@@ -134,4 +145,4 @@ lm_eval --model local-completions \
 
 ## Model Notes
 
-The configs follow the project assumption of `Qwen/Qwen3.5-27B` for the first full run and `Qwen/Qwen3.5-9B` for smoke tests.
+The GRPO configs use `Qwen/Qwen3.5-27B` for both the 100-prompt smoke and the full run.

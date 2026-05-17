@@ -15,6 +15,9 @@ outputs/
 reports/
 wandb/
 *.log
-.venv-qwen35/
+.venv-qwen3/
+.venv-sglang/
+.venv-verl/
 .venv/
+logs/
 data/llamafactory/npc_sft_train.json

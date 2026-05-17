@@ -6,6 +6,14 @@ base:
   context_length: 8192
   mem_fraction_static: 0.88
 
+base_local:
+  served_model_name: Qwen3.5-NPC-Base
+  model: /tmp/xiang/llm_models/qwen3_5_27b_base
+  port: 8000
+  tensor_parallel_size: 4
+  context_length: 8192
+  mem_fraction_static: 0.88
+
 sft:
   served_model_name: Qwen3.5-NPC-SFT
   model: outputs/sft/qwen3_5_27b_npc_merged
@@ -13,6 +21,36 @@ sft:
   tensor_parallel_size: 4
   context_length: 8192
   mem_fraction_static: 0.88
+
+sft_local:
+  served_model_name: Qwen3.5-NPC-SFT
+  model: /tmp/xiang/llm_models/qwen3_5_27b_npc_merged
+  port: 8001
+  tensor_parallel_size: 4
+  context_length: 8192
+  mem_fraction_static: 0.88
+
+sft_lora_local:
+  served_model_name: Qwen3.5-NPC-SFT
+  model: /tmp/xiang/llm_models/qwen3_5_27b_base
+  port: 8001
+  tensor_parallel_size: 4
+  context_length: 8192
+  mem_fraction_static: 0.88
+  extra_args:
+    --lora-paths: npc=/tmp/xiang/llm_models/qwen3_5_27b_npc_lora
+    --max-lora-rank: 64
+
+sft_lora_supported_local:
+  served_model_name: Qwen3.5-NPC-SFT
+  model: /tmp/xiang/llm_models/qwen3_5_27b_base
+  port: 8001
+  tensor_parallel_size: 4
+  context_length: 8192
+  mem_fraction_static: 0.88
+  extra_args:
+    --lora-paths: npc=/tmp/xiang/llm_models/qwen3_5_27b_npc_lora_sglang_supported
+    --max-lora-rank: 64
 
 grpo:
   served_model_name: Qwen3.5-NPC-GRPO

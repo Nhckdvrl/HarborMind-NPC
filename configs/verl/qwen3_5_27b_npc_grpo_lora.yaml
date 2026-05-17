@@ -1,0 +1,32 @@
+# Reference override set for scripts/run_verl_grpo.sh.
+model_path: outputs/sft/qwen3_5_27b_npc_merged
+output_dir: outputs/grpo/qwen3_5_27b_npc_grpo
+reward_path: src/game_npc_llm/rewards/verl_reward.py
+
+data:
+  train_files:
+    smoke: data/rl/verl/grpo_smoke_100.parquet
+    full: data/rl/verl/grpo_train.parquet
+  prompt_key: prompt
+  max_prompt_length: 2048
+  max_response_length: 512
+  train_batch_size: 16
+  val_batch_size: 16
+
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: false
+
+actor_rollout_ref:
+  actor:
+    use_kl_loss: true
+    kl_loss_coef: 0.001
+  rollout:
+    n: 4
+  model:
+    lora_rank: 64
+    lora_alpha: 64
+    target_modules: all-linear
+
+trainer:
+  n_gpus_per_node: 4

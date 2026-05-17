@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import shlex
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,7 @@ def main() -> None:
 
 def render_command(profile: dict[str, Any]) -> str:
     cmd = [
-        "python",
+        sys.executable,
         "-m",
         "sglang.launch_server",
         "--model-path",
