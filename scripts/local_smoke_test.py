@@ -1,33 +1,34 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import subprocess
 import sys
-import os
+import tempfile
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def run(args: list[str]) -> None:
-    env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
-    result = subprocess.run(args, cwd=ROOT, env={**env}, capture_output=True, text=True)
-    if result.returncode:
-        print(result.stdout)
-        print(result.stderr)
-        raise SystemExit(result.returncode)
-    print(result.stdout.strip())
+def run(cmd: list[str]) -> None:
+    print("+", " ".join(cmd))
+    subprocess.run(cmd, check=True)
 
 
 def main() -> None:
     py = sys.executable
-    run([py, "scripts/download_data.py", "--dry-run"])
-    run([py, "scripts/validate_jsonl.py", "data/processed/sft_train.jsonl", "--schema", "sft"])
-    run([py, "scripts/validate_jsonl.py", "data/processed/grpo_prompts.jsonl", "--schema", "grpo"])
-    run([py, "scripts/validate_jsonl.py", "data/processed/eval_cases.jsonl", "--schema", "eval"])
-    run([py, "scripts/validate_lm_eval_task.py"])
-    run([py, "scripts/run_agent_demo.py"])
+    with tempfile.TemporaryDirectory(prefix="game-npc-smoke-") as tmp:
+        output_dir = Path(tmp) / "data"
+        run([py, "scripts/build_product_data.py", "--dry-run", "--output-dir", str(output_dir)])
+        run([py, "scripts/validate_jsonl.py", str(output_dir / "processed/sft_train.jsonl"), "--schema", "sft"])
+        run(
+            [
+                py,
+                "scripts/validate_jsonl.py",
+                str(output_dir / "processed/preference_train.jsonl"),
+                "--schema",
+                "preference",
+            ]
+        )
+        run([py, "scripts/validate_jsonl.py", str(output_dir / "processed/eval_cases.jsonl"), "--schema", "eval"])
+        run([py, "-m", "pytest"])
 
 
 if __name__ == "__main__":

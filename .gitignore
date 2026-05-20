@@ -11,6 +11,8 @@ htmlcov/
 data/raw/
 data/cache/
 data/processed/*.jsonl
+data/eval/*.jsonl
+data/raw_manifest.json
 outputs/
 reports/
 wandb/
@@ -21,3 +23,6 @@ wandb/
 .venv/
 logs/
 data/llamafactory/npc_sft_train.json
+data/llamafactory/npc_sft_valid.json
+data/llamafactory/npc_preference_train.json
+data/product_manifest.json

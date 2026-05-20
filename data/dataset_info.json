@@ -26,5 +26,15 @@
       "assistant_tag": "assistant",
       "system_tag": "system"
     }
+  },
+  "game_npc_preference": {
+    "file_name": "llamafactory/npc_preference_train.json",
+    "ranking": true,
+    "formatting": "alpaca",
+    "columns": {
+      "prompt": "prompt",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
   }
 }

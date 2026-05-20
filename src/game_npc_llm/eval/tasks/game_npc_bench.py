@@ -51,20 +51,24 @@ class GameNPCBench(Task):  # type: ignore[misc]
 
     def aggregation(self):
         return {
-            "character_consistency": statistics.mean,
-            "quest_completion_rate": statistics.mean,
-            "hallucination_rate": statistics.mean,
+            "json_validity": statistics.mean,
+            "action_validity": statistics.mean,
+            "role_adherence": statistics.mean,
+            "quest_progression": statistics.mean,
             "system_leakage_rate": statistics.mean,
+            "memory_write_rate": statistics.mean,
             "average_latency": statistics.mean,
             "tokens_per_second": statistics.mean,
         }
 
     def higher_is_better(self):
         return {
-            "character_consistency": True,
-            "quest_completion_rate": True,
-            "hallucination_rate": False,
+            "json_validity": True,
+            "action_validity": True,
+            "role_adherence": True,
+            "quest_progression": True,
             "system_leakage_rate": False,
+            "memory_write_rate": True,
             "average_latency": False,
             "tokens_per_second": True,
         }
