@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "game-npc-llm"
 version = "0.1.0"
-description = "Post-training pipeline for game NPC LLMs using LIGHT and NPC-Dialogue_v2."
+description = "Product-oriented NPC LLM pipeline with public roleplay data, alignment, memory, and FastAPI demo."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -30,19 +30,18 @@ train = [
 ]
 serve = [
   "fastapi>=0.111.0",
-  "ninja>=1.11.1",
-  "safetensors>=0.4.3",
-  "sglang[all]>=0.4.6.post1",
-  "tqdm>=4.66.0",
   "uvicorn>=0.30.0",
 ]
 rl = [
-  "datasets>=2.18.0",
-  "pyarrow>=15.0.0",
-  "verl>=0.5.0",
+  "trl>=0.24.0",
+  "vllm>=0.8.0",
 ]
 eval = [
-  "lm-eval>=0.4.4",
+  "deepeval>=3.0.0",
+]
+memory = [
+  "chromadb>=0.5.0",
+  "faiss-cpu>=1.8.0",
 ]
 
 [tool.setuptools.packages.find]

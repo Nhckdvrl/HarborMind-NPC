@@ -17,7 +17,7 @@ from game_npc_llm.data.schemas import validate_record
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate processed JSONL schema.")
     parser.add_argument("path", type=Path)
-    parser.add_argument("--schema", choices=["sft", "grpo", "eval"], required=True)
+    parser.add_argument("--schema", choices=["sft", "preference", "eval"], required=True)
     args = parser.parse_args()
 
     count = 0

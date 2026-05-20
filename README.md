@@ -1,148 +1,144 @@
-# Game NPC LLM Post-training Pipeline
+# GameNPC-RL
 
-Reproducible pipeline for building a quest-oriented game NPC model from public datasets only:
+Product-oriented NPC LLM pipeline for a small RPG demo: public roleplay datasets, lightweight
+LoRA SFT + ORPO/DPO alignment, structured JSON actions, long-term memory, FastAPI serving, and
+a browser demo that can also be called from Unity.
 
-- LIGHT / LIGHT-WILD / LIGHT-Quests from ParlAI/Facebook Research.
-- `chimbiwide/NPC-Dialogue_v2` from Hugging Face.
+The project is shaped for an NLP/game AI internship portfolio and focuses on a practical 3B-8B
+workflow that can run on modest GPUs.
 
-The project covers data conversion, QLoRA SFT with LLaMA-Factory, GRPO-LoRA alignment with verl, SGLang serving, a LIGHT quest NPC agent, and evaluation through a custom lm-evaluation-harness task.
+## What It Builds
 
-## Repository Layout
+- A `Qwen/Qwen3-4B` NPC model trained with LLaMA-Factory LoRA SFT.
+- Optional ORPO alignment on chosen/rejected roleplay responses.
+- A JSON-first NPC interface with `dialogue`, `emotion`, `action`, `target`, `quest_update`,
+  `memory_write`, and `safety_flags`.
+- A FastAPI service with `/chat`, `/world`, `/state/{session_id}`, `/memory/search`, and `/reset`.
+- A browser demo for the original `Kisaragi Harbor` RPG scene.
 
-```text
-configs/                 Training, GRPO, serving, and eval configs
-data/                    Raw and processed data output directory
-scripts/                 Reproducible CLI entrypoints
-src/game_npc_llm/        Data, agent, reward, serving, and eval code
-tests/                   Local schema and state-machine tests
-```
+## Data Strategy
 
-## Local Setup
+Public datasets are the training backbone:
 
-```bash
-conda create -p .venv-qwen35 python=3.11
-conda activate "$(pwd)/.venv-qwen35"
-pip install -e ".[dev]"
-```
+- `chimbiwide/RolePlay-NPC-Quest` as the primary NPC/quest roleplay source.
+- `chimbiwide/NPC-Dialogue_v2` as an auxiliary game NPC dialogue source.
+- `allenai/soda` as a downsampled social/emotional dialogue source.
+- `vicgalle/OpenHermesPreferences-roleplay` as optional internal preference data because its
+  license is not ideal for public model release.
 
-Optional local extras:
+The original `Kisaragi Harbor` data is intentionally small. It is used for demo, evaluation, and
+schema grounding, not for pretending we hand-authored a huge training set.
 
-```bash
-pip install -e ".[train,serve,eval]"
-```
-
-For GRPO training, install the RL extra in the training environment:
+## Setup
 
 ```bash
-pip install -e ".[rl]"
+conda create -p .venv-qwen3 python=3.11
+conda activate "$(pwd)/.venv-qwen3"
+pip install -e ".[dev,serve,train]"
 ```
 
-## Data Pipeline
-
-Dry run without downloading large datasets:
+Optional extras:
 
 ```bash
-python3 scripts/download_data.py --dry-run
-python3 scripts/local_smoke_test.py
+pip install -e ".[eval,memory,rl]"
 ```
 
-Build processed JSONL files:
+## Build Data
+
+Tiny local smoke set:
 
 ```bash
-python3 scripts/download_data.py --output-dir data --seed 42
-python3 scripts/validate_jsonl.py data/processed/sft_train.jsonl --schema sft
-python3 scripts/validate_jsonl.py data/processed/grpo_prompts.jsonl --schema grpo
-python3 scripts/validate_jsonl.py data/processed/eval_cases.jsonl --schema eval
+python scripts/build_product_data.py --dry-run
+python scripts/validate_jsonl.py data/processed/sft_train.jsonl --schema sft
+python scripts/validate_jsonl.py data/processed/preference_train.jsonl --schema preference
+python scripts/validate_jsonl.py data/processed/eval_cases.jsonl --schema eval
 ```
 
-Outputs:
+Full public-data build:
 
-- `data/processed/sft_train.jsonl`
-- `data/processed/sft_validation.jsonl`
-- `data/processed/sft_test.jsonl`
-- `data/llamafactory/npc_sft_train.json`
-- `data/llamafactory/npc_sft_valid.json`
-- `data/raw_manifest.json`
-- `data/processed/grpo_prompts.jsonl`
-- `data/processed/eval_cases.jsonl`
-- `data/eval/eval_cases.jsonl`
+```bash
+python scripts/build_product_data.py \
+  --roleplay-limit 20000 \
+  --npc-dialogue-limit 3500 \
+  --soda-limit 10000
+```
 
-## SFT
+Add optional roleplay preference data:
 
-Smoke:
+```bash
+python scripts/build_product_data.py --include-optional-preferences
+```
+
+## Train
+
+SFT:
 
 ```bash
 bash scripts/run_sft.sh
 ```
 
-Main:
+ORPO alignment:
 
 ```bash
-bash scripts/run_sft.sh configs/llamafactory/qwen3_5_27b_npc_sft_qlora.yaml
+bash scripts/run_sft.sh configs/llamafactory/qwen3_4b_npc_orpo_lora.yaml
 ```
 
-LLaMA-Factory reads the local SFT JSONL files through `data/dataset_info.json`.
-The processed `messages` column is registered as a ShareGPT/OpenAI-style chat dataset.
-The Qwen3.5 configs use LLaMA-Factory's `qwen3_5_nothink` template, matching the direct NPC reply style in the SFT data.
-
-Merge the main SFT adapter for serving and GRPO initialization:
+Export merged SFT model:
 
 ```bash
 bash scripts/export_sft.sh
 ```
 
-## GRPO
+## Serve And Demo
+
+Rule-policy demo, no model server required:
 
 ```bash
-python3 scripts/prepare_verl_grpo_data.py
+uvicorn game_npc_llm.product.server:app --reload --port 8080
 ```
 
-Smoke on 100 LIGHT-Quests prompts:
+Open `http://localhost:8080`.
+
+Connect a local llama.cpp or vLLM OpenAI-compatible endpoint:
 
 ```bash
-bash scripts/run_verl_grpo.sh smoke
+NPC_MODEL_BASE_URL=http://localhost:8000/v1 \
+NPC_MODEL_NAME=Qwen3-4B-NPC \
+uvicorn game_npc_llm.product.server:app --port 8080
 ```
 
-Full 27B run after smoke passes:
+Unity can call the same `/chat` endpoint with:
 
-```bash
-bash scripts/run_verl_grpo.sh full
-```
-
-GRPO uses verl-compatible parquet files under `data/rl/verl/`, not the SFT assistant-answer dataset. The smoke file is `data/rl/verl/grpo_smoke_100.parquet`; the full file is `data/rl/verl/grpo_train.parquet`. Each row stores the LIGHT-Quests prompt plus persona, setting, goal, allowed entities, expected actions, and source metadata in `extra_info`; verl calls `game_npc_llm.rewards.verl_reward.compute_score` for the rule reward.
-
-## SGLang Serving
-
-```bash
-bash scripts/serve_sglang.sh base
-bash scripts/serve_sglang.sh sft
-bash scripts/serve_sglang.sh grpo
-```
-
-## Agent Demo
-
-```bash
-python3 scripts/run_agent_demo.py --model-url http://localhost:8000/v1 --model Qwen3.5-NPC-GRPO
+```json
+{
+  "session_id": "unity-demo",
+  "npc_id": "mika",
+  "player_input": "The tide engine pressure is climbing."
+}
 ```
 
 ## Evaluation
 
-Validate task import locally:
+The benchmark scores product-facing behavior:
 
-```bash
-python3 scripts/validate_lm_eval_task.py
-```
+- JSON validity
+- action validity
+- role adherence
+- quest progression
+- memory write rate
+- system leakage rate
+- latency / throughput
 
-Run a full eval on a served model:
+The old lm-eval task remains lightweight, but the project direction is DeepEval-style scenario
+evaluation plus deterministic rule checks.
 
-```bash
-lm_eval --model local-completions \
-  --tasks game_npc_bench \
-  --include_path src/game_npc_llm/eval/tasks \
-  --model_args model=Qwen3.5-NPC-GRPO,base_url=http://localhost:8000/v1/completions \
-  --output_path reports/grpo_eval.json
-```
+## Research/Portfolio Narrative
 
-## Model Notes
+This project demonstrates the full loop that a game R&D NLP intern is expected to understand:
 
-The GRPO configs use `Qwen/Qwen3.5-27B` for both the 100-prompt smoke and the full run.
+1. Curate public roleplay/game dialogue data with licensing and filtering.
+2. Train a small open model with LoRA SFT.
+3. Improve behavior with modern offline preference optimization such as ORPO/SimPO/DPO.
+4. Validate output with Pydantic schemas so a game engine can safely consume actions.
+5. Add long-term memory and stateful quest execution.
+6. Ship a usable Web/Unity-facing prototype.

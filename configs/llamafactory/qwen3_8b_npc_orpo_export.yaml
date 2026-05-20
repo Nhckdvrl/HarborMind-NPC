@@ -1,0 +1,11 @@
+### model
+model_name_or_path: /tmp/xiang/llm_models/qwen3_8b
+adapter_name_or_path: outputs/alignment/qwen3_8b_npc_orpo_lora
+template: qwen3_nothink
+trust_remote_code: true
+
+### export
+export_dir: outputs/alignment/qwen3_8b_npc_orpo_merged
+export_size: 5
+export_device: cpu
+export_legacy_format: false

@@ -1,7 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -10,33 +11,19 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from game_npc_llm.agent.quest_agent import EchoChatClient, OpenAIChatClient, QuestAgent, QuestState
+from game_npc_llm.product.agent import GameAgent
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model-url", default="")
-    parser.add_argument("--model", default="Qwen3-NPC-GRPO")
+    parser = argparse.ArgumentParser(description="Run the local rule-policy NPC demo.")
+    parser.add_argument("--npc", default="mika")
+    parser.add_argument("--session-id", default="cli")
+    parser.add_argument("--message", default="The tide engine pressure is climbing. What should I do?")
     args = parser.parse_args()
 
-    client = OpenAIChatClient(args.model_url, args.model) if args.model_url else EchoChatClient()
-    agent = QuestAgent(
-        QuestState(
-            persona="Edrin is an old gate warden who trusts deeds more than boasts.",
-            setting="The mossy north gate of a border keep.",
-            goal="Guide the player to recover the brass gate key from the abandoned watch post.",
-        ),
-        client,
-    )
-    for player in [
-        "What do you need from me?",
-        "I will get the brass gate key.",
-        "I returned and delivered the key.",
-    ]:
-        result = agent.step(player)
-        print(f"PLAYER: {player}")
-        print(f"NPC: {result['npc_response']}")
-        print(f"EVENTS: {result['tool_events']}\n")
+    agent = GameAgent.demo()
+    result = agent.chat(args.npc, args.message, args.session_id)
+    print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
