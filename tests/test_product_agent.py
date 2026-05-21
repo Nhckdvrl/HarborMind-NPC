@@ -5,13 +5,15 @@ from game_npc_llm.product.policy import RulePolicyClient
 from game_npc_llm.product.world import load_world
 
 
-class CapturePolicy(RulePolicyClient):
-    def __init__(self):
-        self.calls = []
+class CapturePolicy:
+    """Non-rule policy that records every complete() call for assertion."""
 
-    def complete(self, messages):
+    def __init__(self):
+        self.calls: list[list[dict]] = []
+
+    def complete(self, messages: list[dict]) -> str:
         self.calls.append(messages)
-        return super().complete(messages)
+        return '{"dialogue": "测试回复", "emotion": "neutral", "action": "speak", "memory_write": []}'
 
 
 class IllegalActionPolicy:
@@ -46,6 +48,7 @@ def test_agent_blocks_unknown_npc():
 
 
 def test_agent_remembers_player_name_in_prompt_and_memory():
+    """Player name extracted from intro turn must appear in subsequent LLM context."""
     policy = CapturePolicy()
     agent = GameAgent(
         world=load_world(),
@@ -55,28 +58,41 @@ def test_agent_remembers_player_name_in_prompt_and_memory():
     )
 
     agent.chat("mika", "我是湘婷", session_id="name-test")
-    agent.chat("mika", "你不是问过了吗？？", session_id="name-test")
+    agent.chat("mika", "你好啊", session_id="name-test")
 
     state = agent.state_for("name-test")
     assert state.player_profile["name"] == "湘婷"
-    last_user_prompt = policy.calls[-1][-1]["content"]
-    last_system_prompt = policy.calls[-1][0]["content"]
-    assert "Known player profile: name: 湘婷" in last_user_prompt
-    assert "The player's name is 湘婷. Do not ask for their name again." in last_user_prompt
-    assert "Do not invent real-world cities" in last_system_prompt
+
+    # Agent goes through LLM path (CapturePolicy is not RulePolicyClient)
+    assert len(policy.calls) == 2
+    last_system = policy.calls[-1][0]["content"]
+    last_user = policy.calls[-1][-1]["content"]
+
+    # New agent-harness system prompt must identify the NPC
+    assert "Mika Arai" in last_system
+    assert "行为守则" in last_system
+
+    # Per-turn user message must carry current player profile
+    assert "name=湘婷" in last_user
+
+    # Memory store must have the name fact
+    hits = agent.memory.search("name-test", "mika", "湘婷")
+    assert any("湘婷" in h for h in hits)
 
 
-def test_contextual_guard_answers_known_name_and_location():
+def test_player_name_stored_in_profile_and_history():
+    """Player name must be stored in profile and message_history after intro."""
     agent = GameAgent.demo()
 
-    intro = agent.chat("mika", "我是湘婷", session_id="guard-test")
-    repeat = agent.chat("mika", "你不是问过了吗？？", session_id="guard-test")
-    location = agent.chat("mika", "这里是哪儿", session_id="guard-test")
+    agent.chat("mika", "我是湘婷", session_id="history-test")
+    agent.chat("mika", "再说一遍", session_id="history-test")
 
-    assert "湘婷" in intro.response.dialogue
-    assert "湘婷" in repeat.response.dialogue
-    assert "Lantern Pier" in location.response.dialogue
-    assert "San Francisco" not in location.response.dialogue
+    state = agent.state_for("history-test")
+    assert state.player_profile["name"] == "湘婷"
+    # message_history must have two (user, assistant) pairs = 4 entries
+    assert len(state.message_history) == 4
+    user_turns = [m["content"] for m in state.message_history if m["role"] == "user"]
+    assert "我是湘婷" in user_turns
 
 
 def test_rule_policy_progresses_cross_npc_ledger_route():

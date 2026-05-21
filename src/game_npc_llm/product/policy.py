@@ -22,8 +22,8 @@ class OpenAICompatiblePolicyClient:
             timeout=float(os.getenv("NPC_MODEL_TIMEOUT", "120")),
         )
         self.model = model
-        self.temperature = float(os.getenv("NPC_MODEL_TEMPERATURE", "0.2"))
-        self.max_tokens = int(os.getenv("NPC_MODEL_MAX_TOKENS", "128"))
+        self.temperature = float(os.getenv("NPC_MODEL_TEMPERATURE", "0.7"))
+        self.max_tokens = int(os.getenv("NPC_MODEL_MAX_TOKENS", "512"))
 
     def complete(self, messages: list[dict[str, str]]) -> str:
         response = self.client.chat.completions.create(
@@ -33,6 +33,15 @@ class OpenAICompatiblePolicyClient:
             max_tokens=self.max_tokens,
         )
         return response.choices[0].message.content or ""
+
+
+def create_policy_from_env() -> "PolicyClient":
+    """Factory: returns LLM client if NPC_MODEL_URL is set, otherwise rule-based fallback."""
+    url = os.getenv("NPC_MODEL_URL", "").strip()
+    if url:
+        model = os.getenv("NPC_MODEL", "qwen3-4b")
+        return OpenAICompatiblePolicyClient(base_url=url, model=model)
+    return RulePolicyClient()
 
 
 class RulePolicyClient:

@@ -82,6 +82,7 @@ class GameState(BaseModel):
     known_clues: list[str] = Field(default_factory=list)
     world_flags: dict[str, bool] = Field(default_factory=dict)
     recent_turns: list[str] = Field(default_factory=list)
+    message_history: list[dict] = Field(default_factory=list)
 
     def remember_turn(self, speaker: str, text: str, limit: int = 12) -> None:
         clean = text.strip()

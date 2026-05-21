@@ -5,15 +5,16 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from game_npc_llm.data.prompts import npc_json_system_prompt, npc_json_user_prompt
+from game_npc_llm.data.prompts import npc_agent_system_prompt, npc_turn_user_message
 from game_npc_llm.data.schemas import NPCAction, NPCResponse, repair_npc_response
-from game_npc_llm.product.memory import InMemoryMemoryStore, MemoryStore
+from game_npc_llm.product.memory import InMemoryMemoryStore, MemoryStore, create_memory_store
 from game_npc_llm.product.models import ChatResult, GameState, WorldDefinition
-from game_npc_llm.product.policy import PolicyClient, RulePolicyClient
+from game_npc_llm.product.policy import PolicyClient, RulePolicyClient, create_policy_from_env
 from game_npc_llm.product.world import load_world
 
-_REPEATED_PHRASES = ["不是问过", "不是問過", "问过了", "問過了"]
-_LOCATION_PHRASES = ["这里是哪", "這裡是哪", "在哪", "哪儿", "哪裡"]
+# Maximum number of (user + assistant) messages kept in per-session history.
+# 20 messages = 10 full turns, warm context without blowing the context window.
+_MAX_HISTORY = 20
 
 
 @dataclass
@@ -42,10 +43,11 @@ class GameAgent:
 
     @classmethod
     def demo(cls) -> "GameAgent":
+        """Factory that auto-selects policy from env: LLM if NPC_MODEL_URL is set, else rules."""
         return cls(
             world=load_world(),
-            policy=RulePolicyClient(),
-            memory=InMemoryMemoryStore(),
+            policy=create_policy_from_env(),
+            memory=create_memory_store(),
             states={},
         )
 
@@ -79,40 +81,49 @@ class GameAgent:
         self._persist()
         return state
 
+    # ------------------------------------------------------------------
+    # Core agent loop  (nanobot-inspired: observe → think → act)
+    # ------------------------------------------------------------------
+
     def chat(self, npc_id: str, player_input: str, session_id: str = "demo") -> ChatResult:
         if npc_id not in self.world.npcs:
             raise ValueError(f"Unknown npc_id: {npc_id}")
+
         state = self.state_for(session_id)
         npc = self.world.npcs[npc_id]
         location = self.world.locations[npc.location_id]
+
+        # OBSERVE: extract facts from player input, retrieve relevant memories
         extracted_memories = self._extract_player_facts(state, npc_id, player_input)
         memory_hits = self.memory.search(session_id, npc_id, player_input)
-        system = npc_json_system_prompt(
-            persona=f"{npc.name}, {npc.role}. {npc.persona}",
-            setting=self._setting_text(location),
-            goal="; ".join(npc.goals),
-        )
-        user = npc_json_user_prompt(
-            player_input,
-            self._state_text(state, npc_id),
-            memory_hits,
-            self._response_guidance(state, npc_id, player_input),
-        )
-        if self.policy.__class__ is RulePolicyClient:
+
+        # THINK: send full context to LLM (or rule fallback)
+        if isinstance(self.policy, RulePolicyClient):
             raw = self.policy.complete_turn(self.world, state, npc_id, player_input, memory_hits)
         else:
-            raw = self.policy.complete(
-                [{"role": "system", "content": system}, {"role": "user", "content": user}]
-            )
+            messages = self._build_llm_messages(npc, location, npc_id, player_input, state, memory_hits)
+            raw = self.policy.complete(messages)
+
         response = repair_npc_response(raw)
-        self._apply_contextual_dialogue_guard(state, npc_id, player_input, response)
+
+        # ACT: execute the chosen action, update game state
         result = self._execute_response(state, npc_id, player_input, response)
+
+        # Update dialogue history as proper chat messages (clean text, no state noise).
+        # This is what gets injected into next turn's LLM context.
+        state.message_history.append({"role": "user", "content": player_input})
+        state.message_history.append({"role": "assistant", "content": response.dialogue})
+        if len(state.message_history) > _MAX_HISTORY:
+            state.message_history = state.message_history[-_MAX_HISTORY:]
+
         state.remember_turn("Player", player_input)
         state.remember_turn(npc.name, response.dialogue)
+
         for memory in extracted_memories:
             self.memory.add(session_id, npc_id, memory)
         for memory in response.memory_write:
             self.memory.add(session_id, npc_id, memory)
+
         self._persist()
         return ChatResult(
             npc_id=npc_id,
@@ -127,42 +138,23 @@ class GameAgent:
             next_suggestions=self._next_suggestions(state, npc_id),
         )
 
-    def _state_text(self, state: GameState, npc_id: str) -> str:
-        location = self.world.locations[state.current_location_id]
-        npc = self.world.npcs[npc_id]
-        player_profile = state.player_profile or {}
-        profile_text = ", ".join(f"{key}: {value}" for key, value in player_profile.items()) or "unknown"
-        return "\n".join(
-            [
-                f"Current location: {location.name}",
-                f"Speaking NPC: {npc.name}",
-                f"Known player profile: {profile_text}",
-                f"Inventory: {', '.join(state.inventory) or 'empty'}",
-                f"Quest status: {state.quest_status}",
-                f"Quest steps: {state.quest_steps}",
-                f"Known clues: {state.known_clues or 'none'}",
-                f"World flags: {state.world_flags or 'none'}",
-                f"Relationship with {npc.name}: {state.relationships.get(npc_id, 0)}",
-                f"Recent turns: {' | '.join(state.recent_turns[-6:]) or 'none'}",
-                f"Allowed NPC actions: {[action.value for action in npc.allowed_actions]}",
-            ]
-        )
+    def _build_llm_messages(self, npc, location, npc_id: str, player_input: str, state: GameState, memory_hits: list[str]) -> list[dict]:
+        """Bundle system prompt + dialogue history + current observation into one messages list.
 
-    def _setting_text(self, location) -> str:
-        locations = "; ".join(
-            f"{place.name} ({place.id}): {place.description}" for place in self.world.locations.values()
-        )
-        quests = "; ".join(f"{quest.title}: {quest.summary}" for quest in self.world.quests.values())
-        entities = ", ".join(sorted(self.world.allowed_entities()))
-        return "\n".join(
-            [
-                f"World: {self.world.title}. {self.world.premise}",
-                f"Current NPC home location: {location.name}: {location.description}",
-                f"Valid locations: {locations}",
-                f"Active questlines: {quests}",
-                f"Allowed world entities: {entities}",
-            ]
-        )
+        This is the nanobot 'observe' step: the LLM receives its full identity, all prior
+        turns as proper chat messages, and the current game state snapshot as a single context.
+        """
+        system = npc_agent_system_prompt(npc, self.world, location)
+        user_msg = npc_turn_user_message(player_input, state, npc_id, memory_hits)
+        return [
+            {"role": "system", "content": system},
+            *state.message_history[-_MAX_HISTORY:],
+            {"role": "user", "content": user_msg},
+        ]
+
+    # ------------------------------------------------------------------
+    # Game state helpers
+    # ------------------------------------------------------------------
 
     def _extract_player_facts(self, state: GameState, npc_id: str, player_input: str) -> list[str]:
         del npc_id
@@ -172,109 +164,6 @@ class GameAgent:
             state.player_profile["name"] = name
             facts.append(f"The player's name is {name}. Do not ask for their name again.")
         return facts
-
-    def _response_guidance(self, state: GameState, npc_id: str, player_input: str) -> str:
-        npc = self.world.npcs[npc_id]
-        location = self.world.locations[state.current_location_id]
-        text = player_input.lower()
-        hints = ["Answer the player's latest message directly; do not reset the conversation."]
-        name = state.player_profile.get("name")
-        if name:
-            hints.append(f"The player already introduced themselves as {name}; do not ask their name again.")
-        if any(phrase in player_input for phrase in ["你谁", "你是谁", "你是誰"]) or "who are you" in text:
-            hints.append(f"Identify yourself as {npc.name}, {npc.role}, in one natural sentence.")
-        if any(phrase in player_input for phrase in _REPEATED_PHRASES) or "already asked" in text:
-            if name:
-                hints.append(
-                    f"Apologize briefly and acknowledge that you remember the player's name is {name}."
-                )
-            else:
-                hints.append("Apologize briefly for repeating yourself and continue from the recent turns.")
-        if any(phrase in player_input for phrase in _LOCATION_PHRASES) or "where am" in text or "where is this" in text:
-            hints.append(
-                f"Explain that this is {location.name} in {self.world.title}; do not mention any real-world city."
-            )
-        briefing = self._npc_briefing(npc, state, npc_id)
-        if briefing:
-            hints.append(briefing)
-        return " ".join(hints)
-
-    def _npc_briefing(self, npc, state: GameState, npc_id: str) -> str:
-        relation = state.relationships.get(npc_id, 0)
-        parts: list[str] = []
-        if npc.refusal_policy:
-            parts.append(f"Refusal policy: {npc.refusal_policy}")
-        for secret_key, condition in npc.secret_conditions.items():
-            threshold = npc.relationship_thresholds.get(secret_key)
-            unlocked = threshold is None or relation >= threshold
-            gate = (
-                f" (needs relationship >= {threshold}, currently {relation})"
-                if threshold is not None
-                else ""
-            )
-            status = "you may reveal it now" if unlocked else "keep it hidden for now"
-            parts.append(f"Secret '{secret_key}' unlocks when: {condition}{gate}; {status}.")
-        if npc.secrets:
-            parts.append(
-                "Private facts you know but must guard until earned: " + " | ".join(npc.secrets)
-            )
-        return " ".join(parts)
-
-    def _apply_contextual_dialogue_guard(
-        self,
-        state: GameState,
-        npc_id: str,
-        player_input: str,
-        response: NPCResponse,
-    ) -> None:
-        npc = self.world.npcs[npc_id]
-        npc_location = self.world.locations[npc.location_id]
-        player_location = self.world.locations[state.current_location_id]
-        text = player_input.lower()
-        player_name = state.player_profile.get("name")
-        chinese = _contains_cjk(player_input)
-
-        if any(phrase in player_input for phrase in ["你谁", "你是谁", "你是誰"]) or "who are you" in text:
-            response.dialogue = (
-                _npc_identity_line(npc_id, npc.name, npc.role, npc_location.name)
-                if chinese
-                else f"I'm {npc.name}, {npc.role}, stationed at {npc_location.name}. {npc.persona}"
-            )
-            response.action = NPCAction.speak
-            return
-
-        if _extract_player_name(player_input):
-            response.dialogue = (
-                f"记住了，{player_name}。{_npc_identity_line(npc_id, npc.name, npc.role, npc_location.name)}"
-                if chinese
-                else f"Good to meet you, {player_name}. I'm {npc.name}, {npc.role}; ask me anything."
-            )
-            response.action = NPCAction.speak
-            return
-
-        if any(phrase in player_input for phrase in _REPEATED_PHRASES) or "already asked" in text:
-            if player_name:
-                response.dialogue = (
-                    f"抱歉，{player_name}，我刚才重复了。我们接着刚才的话说。"
-                    if chinese
-                    else f"Sorry, {player_name}, I repeated myself. Let's continue from where we were."
-                )
-            else:
-                response.dialogue = (
-                    "抱歉，我刚才重复了。我们接着刚才的话说。"
-                    if chinese
-                    else "Sorry, I repeated myself. Let's continue from where we were."
-                )
-            response.action = NPCAction.speak
-            return
-
-        if any(phrase in player_input for phrase in _LOCATION_PHRASES) or "where am" in text or "where is this" in text:
-            response.dialogue = (
-                f"你现在在{self.world.title}的{player_location.name}。{player_location.description}"
-                if chinese
-                else f"This is {player_location.name} in {self.world.title}. {player_location.description}"
-            )
-            response.action = NPCAction.speak
 
     def _execute_response(
         self, state: GameState, npc_id: str, player_input: str, response: NPCResponse
@@ -354,7 +243,7 @@ class GameAgent:
         text = player_input.lower()
         if response.action in {NPCAction.give_item, NPCAction.reveal_clue, NPCAction.update_quest}:
             return 2
-        if any(term in text for term in ["please", "thanks", "thank", "help", "trust", "ありがとう"]):
+        if any(term in text for term in ["please", "thanks", "thank", "help", "trust", "谢", "麻烦"]):
             return 1
         if response.action == NPCAction.refuse:
             return -1
@@ -385,6 +274,10 @@ class GameAgent:
         return [f"Follow up with {self.world.npcs[npc_id].name}.", "Reset the session to replay another route."]
 
 
+# ------------------------------------------------------------------
+# Module-level helpers
+# ------------------------------------------------------------------
+
 def _quest_complete(required_steps: list[str], completed_steps: list[str]) -> bool:
     return all(step in completed_steps for step in required_steps)
 
@@ -392,7 +285,7 @@ def _quest_complete(required_steps: list[str], completed_steps: list[str]) -> bo
 def _extract_player_name(text: str) -> str | None:
     clean = text.strip()
     patterns = [
-        r"(?:我是|我叫|叫我)\s*([A-Za-z\u4e00-\u9fff][A-Za-z\u4e00-\u9fff0-9_\- ]{0,24})",
+        r"(?:我是|我叫|叫我)\s*([A-Za-z一-鿿][A-Za-z一-鿿0-9_\- ]{0,24})",
         r"(?:my name is|i am|i'm|call me)\s+([A-Za-z][A-Za-z0-9_\- ]{0,24})",
     ]
     for pattern in patterns:
@@ -403,35 +296,3 @@ def _extract_player_name(text: str) -> str | None:
         if name:
             return name[:32]
     return None
-
-
-def _contains_cjk(text: str) -> bool:
-    return bool(re.search(r"[\u4e00-\u9fff]", text))
-
-
-def _npc_identity_line(npc_id: str, name: str, role: str, location_name: str) -> str:
-    role_zh = {
-        "mika": "港口机械师",
-        "ren": "见习档案员",
-        "hana": "神社守钟人",
-        "toma": "航运公会协调人",
-        "iko": "灯塔维护AI",
-    }.get(npc_id, role)
-    lines = {
-        "mika": (
-            f"我是{name}，{role_zh}，驻守在{location_name}；我只管潮汐引擎、压力阀、维修舱口和安全封条。"
-        ),
-        "ren": (
-            f"我是{name}，{role_zh}，在{location_name}核对旧账本；我负责失踪账本、缩微胶片和被抹掉的靠港记录。"
-        ),
-        "hana": (
-            f"我是{name}，{role_zh}，守着{location_name}的旧钟；我解读灯塔警告、船长之声和港口仪式。"
-        ),
-        "toma": (
-            f"我是{name}，{role_zh}，常在{location_name}替公会收拾麻烦；除非你拿出证据，否则我不会承认靠港记录的事。"
-        ),
-        "iko": (
-            f"我是{name}，{role_zh}，从{location_name}监测灯塔信号；我负责路线建议、传感器缺口和风险预警。"
-        ),
-    }
-    return lines.get(npc_id, f"我是{name}，{role_zh}，驻守在{location_name}。")
