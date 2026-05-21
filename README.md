@@ -397,15 +397,3 @@ This project demonstrates an end-to-end game AI workflow:
 6. Add long-term memory and session-aware quest execution.
 7. Ship a playable Web/Unity-facing prototype.
 8. Evaluate the model through both deterministic checks and LLM-as-judge roleplay scoring.
-
-## Name Notes
-
-Recommended project display name: **HarborMind NPC**.
-
-Other viable names:
-
-- **Kisaragi NPC Lab**: more direct and scene-focused.
-- **TideMind NPC**: more stylized, tied to the tide-engine quest.
-- **QuestState NPC**: more technical, emphasizes stateful game execution.
-
-For now, only the README-facing name changes. Renaming the repository or Python package can be done later if needed; doing it separately avoids breaking imports, configs, and scripts.
