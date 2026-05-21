@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Hana Mori portrait">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#40242d"/>
+      <stop offset="1" stop-color="#071112"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="28" fill="url(#bg)"/>
+  <path d="M205 45c12 16 11 32-1 48-12-16-12-32 1-48z" fill="#f0bf6a" opacity=".75"/>
+  <path d="M42 224c9-52 40-82 86-82s77 30 86 82z" fill="#7e2937"/>
+  <path d="M82 224l28-78h36l28 78z" fill="#f3ead7"/>
+  <circle cx="128" cy="109" r="52" fill="#c99a82"/>
+  <path d="M78 104c4-48 27-72 69-67 29 4 45 24 47 61-31-22-61-27-116 6z" fill="#202124"/>
+  <path d="M87 76c23 8 46 8 70 0" stroke="#d7c79a" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="106" cy="116" r="6" fill="#111"/>
+  <circle cx="151" cy="116" r="6" fill="#111"/>
+  <path d="M111 148c11 7 23 7 34 0" fill="none" stroke="#6b3934" stroke-width="6" stroke-linecap="round"/>
+  <path d="M50 62l22-14 22 14-22 14z" fill="#e9dfcf"/>
+  <path d="M72 76v38" stroke="#e9dfcf" stroke-width="7" stroke-linecap="round"/>
+  <path d="M61 114h22l-6 17H67z" fill="#f0bf6a"/>
+  <path d="M33 151c31-9 54-5 70 12" stroke="#f0bf6a" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+</svg>

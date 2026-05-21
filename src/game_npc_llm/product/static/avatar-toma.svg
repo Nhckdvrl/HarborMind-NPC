@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Toma Kure portrait">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f3427"/>
+      <stop offset="1" stop-color="#071112"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="28" fill="url(#bg)"/>
+  <path d="M34 224c10-50 44-80 94-80s84 30 94 80z" fill="#2d2d34"/>
+  <path d="M91 224l17-76h40l17 76z" fill="#eadfc7"/>
+  <path d="M92 150l36 74 36-74 16 74H76z" fill="#111820"/>
+  <circle cx="128" cy="108" r="53" fill="#b98668"/>
+  <path d="M75 102c2-40 24-66 59-69 28-3 51 13 58 50-21 1-43-7-66-25-10 21-28 36-51 44z" fill="#191a1d"/>
+  <circle cx="106" cy="116" r="6" fill="#111"/>
+  <circle cx="151" cy="116" r="6" fill="#111"/>
+  <path d="M108 148c14 10 29 9 42-3" fill="none" stroke="#5f2f2a" stroke-width="6" stroke-linecap="round"/>
+  <path d="M184 142c15 4 24 15 27 32" stroke="#f0bf6a" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="211" cy="178" r="14" fill="#f0bf6a"/>
+  <path d="M200 178h22" stroke="#4b3519" stroke-width="4"/>
+  <path d="M49 51h58l-16 76H33z" fill="#785a39" opacity=".9"/>
+  <path d="M58 62h30M55 78h36M52 94h31" stroke="#e1c98d" stroke-width="4" opacity=".65"/>
+</svg>

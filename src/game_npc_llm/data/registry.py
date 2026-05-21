@@ -12,6 +12,9 @@ class DatasetSpec:
     default_limit: int
     trainable_public: bool = True
     config: str | None = None
+    # Optional column=value filter applied via dataset.filter() before row sampling
+    filter_field: str | None = None
+    filter_value: str | None = None
 
 
 DATASETS = {

@@ -26,3 +26,5 @@ data/llamafactory/npc_sft_train.json
 data/llamafactory/npc_sft_valid.json
 data/llamafactory/npc_preference_train.json
 data/product_manifest.json
+
+.claude/settings.local.json
