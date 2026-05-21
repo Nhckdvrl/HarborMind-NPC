@@ -52,6 +52,13 @@ class NPCResponse(BaseModel):
     memory_write: list[str] = Field(default_factory=list)
     safety_flags: list[str] = Field(default_factory=list)
 
+    @field_validator("quest_update", mode="before")
+    @classmethod
+    def _coerce_quest_update(cls, v: object) -> object:
+        if v == [] or v == {} or v == "":
+            return None
+        return v
+
     @field_validator("memory_write", "safety_flags")
     @classmethod
     def _strip_lists(cls, value: list[str]) -> list[str]:
@@ -127,6 +134,8 @@ def parse_npc_response(text: str) -> tuple[NPCResponse | None, list[str]]:
 
 
 def repair_npc_response(text: str, fallback_dialogue: str | None = None) -> NPCResponse:
+    # Strip Qwen3 thinking blocks before parsing
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
     parsed, _ = parse_npc_response(text)
     if parsed is not None:
         return parsed
@@ -141,14 +150,34 @@ def repair_npc_response(text: str, fallback_dialogue: str | None = None) -> NPCR
 
 
 def extract_json_object(text: str) -> str | None:
-    stripped = text.strip()
-    if stripped.startswith("{") and stripped.endswith("}"):
-        return stripped
+    """Extract the first well-formed JSON object by tracking brace depth."""
+    # Strip markdown code fences first
     match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.S)
     if match:
         return match.group(1)
     start = text.find("{")
-    end = text.rfind("}")
-    if start >= 0 and end > start:
-        return text[start : end + 1]
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
     return None

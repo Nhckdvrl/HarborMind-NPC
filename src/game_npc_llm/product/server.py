@@ -438,7 +438,13 @@ async function runRoute(routeId) {
 }
 async function reset() {
   const state = await (await fetch(`/reset/${sessionId}`, {method: 'POST'})).json();
-  document.getElementById('log').innerHTML = '<div class="turn">Session reset. Choose an NPC and start a quest.</div>';
+  document.getElementById('log').innerHTML = `<div class="turn" style="line-height:1.7">
+    <strong>📍 Kisaragi Harbor &mdash; Late Night</strong><br>
+    The lighthouse AI has sent an anomalous warning. Pressure inside the tide engine is climbing.<br>
+    A ledger has gone missing from the harbor archive, and a late-night docking record has been erased.<br>
+    Rain slicks the stone pier. The old shrine bell has not yet rung.<br><br>
+    <span style="color:var(--gold)">Choose an NPC on the left to begin, or use the route buttons above to run a guided playthrough.</span>
+  </div>`;
   renderState(state, [], [], {});
   renderMap();
   document.getElementById('json').textContent = JSON.stringify({world, state}, null, 2);
@@ -446,11 +452,14 @@ async function reset() {
 function appendTurn(kind, text, response=null) {
   const div = document.createElement('div');
   div.className = `turn ${kind}`;
-  let extra = '';
-  if (response) {
-    extra = `<div><span class="pill">${response.action}</span>${response.target ? `<span class="pill">${response.target}</span>` : ''}${response.safety_flags.map(f => `<span class="pill warn">${f}</span>`).join('')}</div>`;
+  let display = text;
+  if (typeof text === 'string' && text.trimStart().startsWith('{')) {
+    try { display = JSON.parse(text).dialogue || text; } catch(e) {
+      const m = text.match(/"dialogue":"([^"]*)"/);
+      display = m ? m[1] : '…';
+    }
   }
-  div.innerHTML = `<strong>${kind === 'player' ? 'Player' : world.npcs[selectedNpc].name}</strong><p>${text}</p>${extra}`;
+  div.innerHTML = `<strong>${kind === 'player' ? 'Player' : world.npcs[selectedNpc].name}</strong><p>${display}</p>`;
   document.getElementById('log').appendChild(div);
   div.scrollIntoView({behavior: 'smooth', block: 'end'});
 }
