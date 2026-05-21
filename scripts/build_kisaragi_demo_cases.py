@@ -7,7 +7,6 @@ from pathlib import Path
 from game_npc_llm.data.schemas import NPCAction, NPCResponse, QuestUpdate
 from game_npc_llm.product.world import load_world
 
-
 PROMPTS = {
     "mika": [
         ("The tide engine is overheating. I found the broken valve near the pier.", "engine", "get_valve_key", "valve key"),

@@ -16,6 +16,9 @@ class NPCProfile(BaseModel):
     goals: list[str] = Field(default_factory=list)
     secrets: list[str] = Field(default_factory=list)
     inventory: list[str] = Field(default_factory=list)
+    relationship_thresholds: dict[str, int] = Field(default_factory=dict)
+    secret_conditions: dict[str, str] = Field(default_factory=dict)
+    refusal_policy: str = "Deflect unsafe or off-topic requests while staying in character."
     allowed_actions: list[NPCAction] = Field(
         default_factory=lambda: [NPCAction.speak, NPCAction.reveal_clue, NPCAction.remember]
     )
@@ -73,7 +76,11 @@ class GameState(BaseModel):
     quest_status: dict[str, Literal["not_started", "in_progress", "completed", "failed"]] = (
         Field(default_factory=dict)
     )
+    quest_steps: dict[str, list[str]] = Field(default_factory=dict)
     completed_steps: dict[str, list[str]] = Field(default_factory=dict)
+    relationships: dict[str, int] = Field(default_factory=dict)
+    known_clues: list[str] = Field(default_factory=list)
+    world_flags: dict[str, bool] = Field(default_factory=dict)
     recent_turns: list[str] = Field(default_factory=list)
 
     def remember_turn(self, speaker: str, text: str, limit: int = 12) -> None:
@@ -95,3 +102,8 @@ class ChatResult(BaseModel):
     state: GameState
     memory_hits: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
+    visible_events: list[str] = Field(default_factory=list)
+    quest_delta: dict[str, list[str] | str] = Field(default_factory=dict)
+    inventory_delta: list[str] = Field(default_factory=list)
+    relationship_delta: dict[str, int] = Field(default_factory=dict)
+    next_suggestions: list[str] = Field(default_factory=list)

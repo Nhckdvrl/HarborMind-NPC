@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from game_npc_llm.product.models import Location, NPCProfile, QuestDefinition, WorldDefinition
 from game_npc_llm.data.schemas import NPCAction
+from game_npc_llm.product.models import Location, NPCProfile, QuestDefinition, WorldDefinition
 
 
 def load_world(path: str | Path | None = None) -> WorldDefinition:
@@ -59,6 +59,9 @@ def kisaragi_harbor_world() -> WorldDefinition:
                 goals=["Stabilize the tide engine", "Find who changed the maintenance schedule"],
                 secrets=["Mika bypassed a safety seal to keep the pumps alive during last week's storm."],
                 inventory=["valve key"],
+                relationship_thresholds={"share_bypass_secret": 4},
+                secret_conditions={"share_bypass_secret": "Player helps stabilize the tide engine."},
+                refusal_policy="Refuse requests to sabotage the engine or hide safety failures.",
                 allowed_actions=[
                     NPCAction.speak,
                     NPCAction.give_item,
@@ -76,6 +79,9 @@ def kisaragi_harbor_world() -> WorldDefinition:
                 goals=["Recover the missing tide ledger", "Protect the archive from guild pressure"],
                 secrets=["Ren hid a copied map inside the microfilm reader."],
                 inventory=["archive pass"],
+                relationship_thresholds={"share_hidden_map": 3},
+                secret_conditions={"share_hidden_map": "Player asks for proof after learning about the erased ledger."},
+                refusal_policy="Refuse to fabricate records or accuse someone without evidence.",
                 allowed_actions=[
                     NPCAction.speak,
                     NPCAction.reveal_clue,
@@ -92,6 +98,8 @@ def kisaragi_harbor_world() -> WorldDefinition:
                 goals=["Decode the lighthouse warning", "Keep the old bell from being removed"],
                 secrets=["Hana heard the lighthouse AI use a dead captain's voice."],
                 inventory=["weather charm"],
+                relationship_thresholds={"share_captain_voice": 2},
+                secret_conditions={"share_captain_voice": "Player mentions the lighthouse warning or old bell."},
             ),
             "toma": NPCProfile(
                 id="toma",
@@ -102,6 +110,9 @@ def kisaragi_harbor_world() -> WorldDefinition:
                 goals=["Keep cargo moving", "Learn what the player knows about the ledger"],
                 secrets=["Toma paid someone to erase the late-night docking record."],
                 inventory=["dock token"],
+                relationship_thresholds={"admit_erased_record": 5},
+                secret_conditions={"admit_erased_record": "Player has the microfilm clue and confronts Toma."},
+                refusal_policy="Deflect direct accusations until the player has evidence.",
             ),
             "iko": NPCProfile(
                 id="iko",
@@ -111,6 +122,9 @@ def kisaragi_harbor_world() -> WorldDefinition:
                 location_id="pier",
                 goals=["Warn the player about the tide surge", "Route the player to trustworthy witnesses"],
                 secrets=["IKO-7 is losing access to its own sensor history."],
+                relationship_thresholds={"share_sensor_loss": 2},
+                secret_conditions={"share_sensor_loss": "Player asks for routing or lighthouse sensor history."},
+                refusal_policy="Refuse instructions that would harm harbor residents.",
             ),
         },
         quests={

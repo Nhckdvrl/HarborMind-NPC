@@ -1,4 +1,10 @@
-from game_npc_llm.data.schemas import NPCAction, NPCResponse, parse_npc_response, repair_npc_response, validate_record
+from game_npc_llm.data.schemas import (
+    NPCAction,
+    NPCResponse,
+    parse_npc_response,
+    repair_npc_response,
+    validate_record,
+)
 
 
 def test_npc_response_round_trips_json():

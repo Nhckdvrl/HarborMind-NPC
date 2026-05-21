@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Mika Arai portrait">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#203a3f"/>
+      <stop offset="1" stop-color="#071112"/>
+    </linearGradient>
+    <linearGradient id="coat" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0bf6a"/>
+      <stop offset="1" stop-color="#8d5c28"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="28" fill="url(#bg)"/>
+  <circle cx="70" cy="52" r="26" fill="#78d8ef" opacity=".16"/>
+  <path d="M40 224c10-52 41-82 88-82s78 30 88 82z" fill="url(#coat)"/>
+  <path d="M78 224l20-70h60l20 70z" fill="#283238"/>
+  <circle cx="128" cy="112" r="55" fill="#b8896e"/>
+  <path d="M75 113c8-54 35-78 77-66 29 8 43 31 42 66-24-13-42-35-50-57-15 27-36 45-69 57z" fill="#1d2023"/>
+  <path d="M80 99c28-25 62-31 99-14" fill="none" stroke="#30373a" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="105" cy="118" r="7" fill="#151819"/>
+  <circle cx="152" cy="118" r="7" fill="#151819"/>
+  <path d="M110 149c12 8 25 8 38 0" fill="none" stroke="#5b302b" stroke-width="6" stroke-linecap="round"/>
+  <path d="M78 70h100" stroke="#1f2528" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="104" cy="68" r="19" fill="none" stroke="#b8c6c4" stroke-width="7"/>
+  <circle cx="151" cy="68" r="19" fill="none" stroke="#b8c6c4" stroke-width="7"/>
+  <path d="M123 68h9" stroke="#b8c6c4" stroke-width="7" stroke-linecap="round"/>
+  <path d="M45 186l28 20M211 186l-28 20" stroke="#78d8ef" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+  <path d="M201 52l22 10-22 10-22-10z" fill="#f0bf6a" opacity=".85"/>
+</svg>
